@@ -1,0 +1,228 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Users ──
+
+model User {
+  id          String   @id @default(cuid())
+  phone       String   @unique
+  username    String?  @unique
+  displayName String?
+  lastName    String?
+  avatarUrl   String?
+  bio         String?
+  isAdmin     Boolean  @default(false)
+  isBlocked   Boolean  @default(false)
+  isVerified  Boolean  @default(false)
+  lastSeenAt  DateTime?
+  locale      String   @default("ru")
+
+  // ⚠️ ЮРИСТ: Требуется согласие на обработку ПД по 152-ФЗ
+  consentGiven    Boolean  @default(false)
+  consentDate     DateTime?
+  dataDeletedAt   DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sessions    Session[]
+  devices     Device[]
+  chatMembers ChatMember[]
+  messages    Message[]
+  reactions   MessageReaction[]
+  sentReports Report[]     @relation("reporter")
+  gotReports  Report[]     @relation("reported")
+  blocks      Block[]      @relation("blocker")
+  blockedBy   Block[]      @relation("blocked")
+
+  @@index([phone])
+  @@index([username])
+}
+
+model SystemSettings {
+  id                  String   @id @default("system")
+  readOnly            Boolean  @default(false)
+  readOnlyUserIds     String[] @default([])
+  maintenanceMode     Boolean  @default(false)
+  maintenanceUserIds  String[] @default([])
+  updatedAt           DateTime @updatedAt
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshToken String   @unique
+  deviceId     String?
+  ipAddress    String?
+  userAgent    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([refreshToken])
+}
+
+model Device {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fingerprint String
+  name        String?
+  lastSeenAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, fingerprint])
+  @@index([userId])
+}
+
+// ── Verification ──
+
+model VerificationCode {
+  id        String   @id @default(cuid())
+  phone     String
+  code      String
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([phone, code])
+}
+
+// ── Chats ──
+
+enum ChatType {
+  PRIVATE
+  GROUP
+  CHANNEL
+}
+
+model Chat {
+  id          String   @id @default(cuid())
+  type        ChatType
+  name        String?
+  avatarUrl   String?
+  isBlocked   Boolean  @default(false)
+  isVerified  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     ChatMember[]
+  messages    Message[]
+
+  @@index([type])
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model ChatMember {
+  id        String     @id @default(cuid())
+  chatId    String
+  chat      Chat       @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      MemberRole @default(MEMBER)
+  joinedAt  DateTime   @default(now())
+  mutedUntil DateTime?
+  lastReadAt DateTime?
+
+  @@unique([chatId, userId])
+  @@index([userId])
+  @@index([chatId])
+}
+
+// ── Messages ──
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  VOICE
+  SYSTEM
+}
+
+model Message {
+  id        String      @id @default(cuid())
+  chatId    String
+  chat      Chat        @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User        @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  type      MessageType @default(TEXT)
+  content   String?
+  fileUrl   String?
+  fileName  String?
+  fileSize  Int?
+  mimeType  String?
+  duration  Int?        // voice message duration in seconds
+  replyToId String?
+  replyTo   Message?    @relation("replies", fields: [replyToId], references: [id])
+  replies   Message[]   @relation("replies")
+  editedAt  DateTime?
+  deletedAt DateTime?
+  pinnedAt  DateTime?
+  createdAt DateTime    @default(now())
+
+  reactions MessageReaction[]
+
+  @@index([chatId, createdAt])
+  @@index([senderId])
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+  createdAt DateTime @default(now())
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+}
+
+// ── Moderation ──
+
+model Block {
+  id        String   @id @default(cuid())
+  blockerId String
+  blocker   User     @relation("blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String
+  blocked   User     @relation("blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+}
+
+enum ReportReason {
+  SPAM
+  HARASSMENT
+  INAPPROPRIATE
+  OTHER
+}
+
+model Report {
+  id         String       @id @default(cuid())
+  reporterId String
+  reporter   User         @relation("reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedId String
+  reported   User         @relation("reported", fields: [reportedId], references: [id], onDelete: Cascade)
+  reason     ReportReason
+  details    String?
+  resolved   Boolean      @default(false)
+  createdAt  DateTime     @default(now())
+
+  @@index([resolved])
+}
