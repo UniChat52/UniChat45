@@ -1,46 +1,25 @@
 # UniChat
 
-Production-grade web messenger. Приватные и групповые чаты, файлы, голосовые сообщения, i18n (RU/EN).
+Исходный код UniChat: React + Vite frontend, Fastify + Prisma backend, PostgreSQL, Redis, MinIO и Nginx.
 
-## Стек
+## Запуск
 
-- **Backend**: Node.js 20 + TypeScript + Fastify + Prisma + Socket.IO
-- **Frontend**: React 18 + TypeScript + Vite + Zustand
-- **Database**: PostgreSQL 16
-- **Cache**: Redis 7
-- **Files**: MinIO (S3-compatible)
-- **Proxy**: Nginx
-- **Containers**: Docker + docker-compose
-
-## Быстрый старт
+Требуются Docker Engine и Docker Compose.
 
 ```bash
-# 1. Скопировать .env
 cp .env.example .env
-
-# 2. Запустить все сервисы
-docker-compose up --build
-
-# 3. Открыть в браузере
-http://localhost
+docker compose up --build
 ```
 
-## Структура проекта
+После запуска откройте `http://localhost`. Для остановки нажмите `Ctrl+C`; контейнеры можно остановить командой `docker compose down`.
 
-```
-├── backend/         # API + WebSocket сервер
-├── frontend/        # React SPA
-├── nginx/           # Reverse proxy конфиг
-├── docker-compose.yml
-└── .env.example
-```
+Шаблон `.env.example` содержит только dev-настройки. Перед публикацией или production-запуском замените JWT-ключи, пароли БД и MinIO, а также задайте параметры Twilio.
 
-## Лицензия
+## Структура
 
-Proprietary. All rights reserved.
+- `backend/` — API, Socket.IO и схема Prisma.
+- `frontend/` — React-приложение.
+- `nginx/` — конфигурация обратного прокси.
+- `docker-compose.yml` — сервисы приложения.
 
----
-
-> ⚠️ **Юридическое замечание**: Для production-деплоя в РФ необходима консультация юриста
-> по вопросам обработки персональных данных (152-ФЗ), политики конфиденциальности
-> и пользовательского соглашения.
+`node_modules`, собранные `dist`, локальный `.env` и Git-история не включены. Зависимости устанавливаются Docker при сборке. Для ручного запуска используйте Node.js 20 и `npm ci` в `backend/` и `frontend/`.
